@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Verificar si el usuario tiene permisos de root
-#SCRIPT SECUNDARIO
+
 if [ "$EUID" -ne 0 ]; then
   echo "Este script debe ejecutarse como root, o tienes que tener permisos de administrador"
 else
