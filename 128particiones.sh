@@ -44,21 +44,30 @@ else
     echo "bc ya está instalado."
   fi
 
-  # Listar discos disponibles
-  opciones_menu=$(lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{printf "/dev/%s \"%s (%s)\" ", $1, $1, $2}')
+  menu_items=$(lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{printf "/dev/%s \"%s (%s)\" ", $1, $1, $2}')
 
   dialog --clear --title "Discos disponibles" \
-  --menu "Estos son los discos disponibles que tienes en el sistema:" \
-  15 60 6 \
-  $opciones_menu 2>resultado.txt
-  clear
+    --menu "Estos son los discos disponibles que tienes en el sistema:" \
+    15 60 6 \
+    $menu_items \
+    2> resultado.txt
+
+  # Verificar si el usuario hizo una selección
+  if [ $? -eq 0 ]; then
+    seleccion=$(cat resultado.txt)
+    echo "Seleccionaste: $seleccion"
+  else
+    echo "Cancelado por el usuario."
+    exit 1
+  fi
 
   # Obtener el disco seleccionado
-  DISCO=$(lsblk -d -o NAME | grep -v "NAME" | sed -n "${NUM_DISCO}p" | awk '{print "/dev/"$1}')
+  DISCO=$(cat resultado.txt)
 
   # Verificar si el disco existe
   if [ ! -b "$DISCO" ]; then
     echo "El disco seleccionado no es válido o no existe."
+    echo $DISCO
   else
     # Mostrar el disco seleccionado
     echo "Disco seleccionado: $DISCO"
