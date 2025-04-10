@@ -45,13 +45,21 @@ else
   fi
 
   # Listar discos disponibles
-  opciones_menu=$(lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{printf "/dev/%s \"%s (%s)\" ", $1, $1, $2}')
+  echo "Estos son los discos disponibles que tienes en el sistema:"
+  lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{print NR") /dev/"$1" - "$2}'
+  
+  #Solicitar al usuario que elija un disco
+  read -p "Introduce el disco que deseas particionar: " NUM_DISCO
 
-  dialog --clear --title "Discos disponibles" \
-  --menu "Estos son los discos disponibles que tienes en el sistema:" \
-  15 60 6 \
-  $opciones_menu 2>resultado.txt
-  clear
+  # Obtener el disco seleccionado
+  DISCO=$(lsblk -d -o NAME | grep -v "NAME" | sed -n "${NUM_DISCO}p" | awk '{print "/dev/"$1}')
+
+  # Verificar si el disco existe
+  if [ ! -b "$DISCO" ]; then
+    echo "El disco seleccionado no es válido o no existe."
+  else
+    # Mostrar el disco seleccionado
+    echo "Disco seleccionado: $DISCO"
 
   # Obtener el disco seleccionado
   DISCO=$(lsblk -d -o NAME | grep -v "NAME" | sed -n "${NUM_DISCO}p" | awk '{print "/dev/"$1}')
