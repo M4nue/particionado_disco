@@ -51,16 +51,8 @@ else
     15 60 6 \
     $menu_items \
     2> resultado.txt
-
-  # Verificar si el usuario hizo una selección
-  if [ $? -eq 0 ]; then
-    seleccion=$(cat resultado.txt)
-    echo "Seleccionaste: $seleccion"
-  else
-    echo "Cancelado por el usuario."
-    exit 1
-  fi
-
+  
+  clear
   # Obtener el disco seleccionado
   DISCO=$(cat resultado.txt)
 
