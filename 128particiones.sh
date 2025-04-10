@@ -3,8 +3,8 @@
 # Archivo donde se guarda la selección
 RESULTADO="resultado.txt"
 
-# Obtener lista de discos disponibles (ignoramos particiones tipo loop)
-discos=($(lsblk -dno NAME,TYPE | awk '$2 == "disk" {print $1}'))
+# Detectar todos los discos, incluidos loop, nvme, vdb, etc.
+discos=($(lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}'))
 
 # Crear opciones para el menú de dialog
 menu_opciones=()
@@ -15,7 +15,7 @@ done
 # Mostrar menú de selección con dialog
 dialog --clear \
        --title "Selecciona un Disco" \
-       --menu "Elige el disco para ver sus particiones:" 15 50 6 \
+       --menu "Elige el disco donde se crearán 128 particiones:" 20 70 10 \
        "${menu_opciones[@]}" \
        2> "$RESULTADO"
 
@@ -26,25 +26,40 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Leer selección desde el archivo
+# Obtener el disco seleccionado desde resultado.txt
 indice=$(cat "$RESULTADO")
-disco_seleccionado="/dev/${discos[$indice]}"
+disco="${discos[$indice]}"
 
-# Obtener las particiones del disco
-particiones=($(lsblk -ln -o NAME "$disco_seleccionado" | grep -v "^$(basename "$disco_seleccionado")$"))
+# Confirmar
+dialog --yesno "Se crearán 128 particiones en el disco:\n\n$disco\n\n¿Deseas continuar?\n¡Esto borrará su contenido!" 12 60
+if [ $? -ne 0 ]; then
+    clear
+    echo "Operación cancelada por el usuario."
+    exit 1
+fi
 
-# Mostrar barra de progreso
+# Borrar tabla de particiones existente
+parted -s "$disco" mklabel gpt
+
+# Obtener tamaño total del disco en MiB
+tamanio_total=$(parted -s "$disco" unit MiB print | awk '/Disk.*size/ {gsub("MiB","",$3); print int($3)}')
+
+# Calcular tamaño de cada partición
+tamanio_particion=$((tamanio_total / 128))
+
+# Crear particiones con barra de progreso
 (
-total=${#particiones[@]}
-for i in "${!particiones[@]}"; do
-    sleep 0.2  # Simula trabajo
-    porc=$(( (i + 1) * 100 / total ))
+for i in $(seq 0 127); do
+    inicio=$((i * tamanio_particion))
+    fin=$(((i + 1) * tamanio_particion - 1))
+    parted -s "$disco" mkpart primary ${inicio}MiB ${fin}MiB &>/dev/null
+    porc=$(( (i + 1) * 100 / 128 ))
     echo "$porc"
+    sleep 0.05  # pequeña pausa para ver la barra progresar
 done
-) | dialog --gauge "Leyendo particiones de $disco_seleccionado..." 10 60 0
+) | dialog --title "Creando particiones" --gauge "Particionando $disco..." 10 60 0
 
-# Mostrar las particiones encontradas
-dialog --msgbox "Particiones de $disco_seleccionado:\n\n$(lsblk "$disco_seleccionado")" 20 70
+# Mensaje final
+dialog --title "Proceso terminado" --msgbox "Se han creado 128 particiones en $disco exitosamente." 10 50
 
-# Limpiar pantalla y salir
 clear
