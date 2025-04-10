@@ -45,7 +45,7 @@ else
   fi
 
   # Listar discos disponibles
-  opciones_menu=$(lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{print NR") /dev/"$1" - "$2}')
+  opciones_menu=$(lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{printf "/dev/%s \"%s (%s)\" ", $1, $1, $2}')
 
   dialog --clear --title "Discos disponibles" \
   --menu "Estos son los discos disponibles que tienes en el sistema:" \
