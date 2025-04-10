@@ -18,6 +18,19 @@ else
     echo "parted ya está instalado."
   fi
 
+# Verificar que dialog este instalado en caso contrario lo instala:
+  if ! command -v dialog >/dev/null 2>&1; then
+    echo "dialog no está instalado. Instalándolo..."
+    apt update
+    apt install dialog -y
+    if [ $? -ne 0 ]; then
+      echo "Error al instalar dialog. Verifica tu conexión o repositorios."
+    fi
+  else
+    echo "Dialog ya está instalado."
+  fi
+
+
   # Verificar e instalar bc si no está presente
 
   if ! command -v bc >/dev/null 2>&1; then
@@ -32,12 +45,13 @@ else
   fi
 
   # Listar discos disponibles
-  echo "Estos son los discos disponibles que tienes en el sistema:"
-  lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{print NR") /dev/"$1" - "$2}'
-  echo ""
+  opciones_menu=$(lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{print NR") /dev/"$1" - "$2}')
 
-  # Solicitar al usuario que elija un disco
-  read -p "Introduce el disco que deseas particionar: " NUM_DISCO
+  dialog --clear --title "Discos disponibles" \
+  --menu "Estos son los discos disponibles que tienes en el sistema:" \
+  15 60 6 \
+  $opciones_menu 2>resultado.txt
+  clear
 
   # Obtener el disco seleccionado
   DISCO=$(lsblk -d -o NAME | grep -v "NAME" | sed -n "${NUM_DISCO}p" | awk '{print "/dev/"$1}')
@@ -82,6 +96,7 @@ else
         parted -s "$DISCO" print
 
         echo "Script finalizado"
+
       fi
     else
       echo "No se pudo continuar."
