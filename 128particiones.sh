@@ -1,65 +1,88 @@
 #!/bin/bash
+# Verificar si el usuario tiene permisos de root
+if [ "$EUID" -ne 0 ]; then
+  echo "Este script debe ejecutarse como root, o tienes que tener permisos de administrador"
+else
+  # Verificar e instalar parted si no está presente
 
-# Archivo donde se guarda la selección
-RESULTADO="resultado.txt"
+  if ! command -v /usr/sbin/parted >/dev/null 2>&1; then
+    echo "parted no está instalado. Instalándolo..."
+    apt update
+    apt install parted -y
+    if [ $? -ne 0 ]; then
+      echo "Error al instalar parted. Verifica tu conexión o repositorios."
+    fi
+  else
+    echo "parted ya está instalado."
+  fi
 
-# Detectar todos los discos, incluidos loop, nvme, vdb, etc.
-discos=($(lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}'))
+  # Verificar e instalar bc si no está presente
 
-# Crear opciones para el menú de dialog
-menu_opciones=()
-for i in "${!discos[@]}"; do
-    menu_opciones+=("$i" "${discos[$i]}")
-done
+  if ! command -v bc >/dev/null 2>&1; then
+    echo "bc no está instalado. Instalándolo..."
+    apt update
+    apt install bc -y
+    if [ $? -ne 0 ]; then
+      echo "Error al instalar bc. Verifica tu conexión o repositorios."
+    fi
+  else
+    echo "bc ya está instalado."
+  fi
 
-# Mostrar menú de selección con dialog
-dialog --clear \
-       --title "Selecciona un Disco" \
-       --menu "Elige el disco donde se crearán 128 particiones:" 20 70 10 \
-       "${menu_opciones[@]}" \
-       2> "$RESULTADO"
+  # Listar discos disponibles
+  echo "Estos son los discos disponibles que tienes en el sistema:"
+  lsblk -d -o NAME,SIZE | grep -v "NAME" | awk '{print NR") /dev/"$1" - "$2}'
+  echo ""
 
-# Cancelado
-if [ $? -ne 0 ]; then
-    clear
-    echo "Operación cancelada."
-    exit 1
+  # Solicitar al usuario que elija un disco
+  read -p "Introduce el disco que deseas particionar: " NUM_DISCO
+
+  # Obtener el disco seleccionado
+  DISCO=$(lsblk -d -o NAME | grep -v "NAME" | sed -n "${NUM_DISCO}p" | awk '{print "/dev/"$1}')
+
+  # Verificar si el disco existe
+  if [ ! -b "$DISCO" ]; then
+    echo "El disco seleccionado no es válido o no existe."
+  else
+    # Mostrar el disco seleccionado
+    echo "Disco seleccionado: $DISCO"
+
+    # Verificar que ambos estén instalados antes de continuar
+    if command -v /usr/sbin/parted >/dev/null 2>&1 && command -v bc >/dev/null 2>&1; then
+      # Advertencia al usuario
+      echo "Esto eliminará todos los datos en $DISCO y emzará a particionarse, ¿ quieres continuar? (s/n)"
+      read respuesta
+      if [ "$respuesta" != "s" ]; then
+        echo "Operación cancelada."
+      else
+        # Crear una nueva tabla de particiones GPT
+        echo "Creando tabla GPT en $DISCO..."
+        parted -s "$DISCO" mklabel gpt
+
+        # Calcular el tamaño de cada partición automáticamente
+        TAMANIO_TOTAL=$(parted -s "$DISCO" unit MB print | grep "Disk $DISCO" | awk '{print $3}' | sed 's/MB//')
+        TAMANIO_PARTICION=$(echo "$TAMANIO_TOTAL / 128" | bc)
+
+        echo "Tamaño total del disco: $TAMANIO_TOTAL MB"
+        echo "Tamaño de cada partición: $TAMANIO_PARTICION MB"
+
+        # Crear las 128 particiones
+        for ((i=1; i<=128; i++))
+        do
+          INICIO=$(( (i-1) * TAMANIO_PARTICION ))
+          FIN=$(( i * TAMANIO_PARTICION ))
+  
+          echo "Creando partición $i: de ${INICIO}MB a ${FIN}MB"
+          /usr/sbin/parted -s "$DISCO" mkpart primary ${INICIO}MB ${FIN}MB
+        done
+
+        echo "Ya esta listo el particionado."
+        /usr/sbin/parted -s "$DISCO" print
+
+        echo "Script finalizado"
+      fi
+    else
+      echo "No se pudo continuar."
+    fi
+  fi
 fi
-
-# Obtener el disco seleccionado desde resultado.txt
-indice=$(cat "$RESULTADO")
-disco="${discos[$indice]}"
-
-# Confirmar
-dialog --yesno "Se crearán 128 particiones en el disco:\n\n$disco\n\n¿Deseas continuar?\n¡Esto borrará su contenido!" 12 60
-if [ $? -ne 0 ]; then
-    clear
-    echo "Operación cancelada por el usuario."
-    exit 1
-fi
-
-# Borrar tabla de particiones existente
-parted -s "$disco" mklabel gpt
-
-# Obtener tamaño total del disco en MiB
-tamanio_total=$(parted -s "$disco" unit MiB print | awk '/Disk.*size/ {gsub("MiB","",$3); print int($3)}')
-
-# Calcular tamaño de cada partición
-tamanio_particion=$((tamanio_total / 128))
-
-# Crear particiones con barra de progreso
-(
-for i in $(seq 0 127); do
-    inicio=$((i * tamanio_particion))
-    fin=$(((i + 1) * tamanio_particion - 1))
-    parted -s "$disco" mkpart primary ${inicio}MiB ${fin}MiB &>/dev/null
-    porc=$(( (i + 1) * 100 / 128 ))
-    echo "$porc"
-    sleep 0.05  # pequeña pausa para ver la barra progresar
-done
-) | dialog --title "Creando particiones" --gauge "Particionando $disco..." 10 60 0
-
-# Mensaje final
-dialog --title "Proceso terminado" --msgbox "Se han creado 128 particiones en $disco exitosamente." 10 50
-
-clear
